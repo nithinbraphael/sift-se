@@ -22,7 +22,7 @@ public class Spider {
         URI uri = URI.create(startUrl);
         domain = uri.getHost();
         this.maxPages = maxPages;
-        client = HttpClient.newHttpClient();
+        client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 
     public void start(){
@@ -37,7 +37,13 @@ public class Spider {
             visited.add(url);
 
             try {
-                String html = downloadPage(url);
+                if (!isHtml(url)) {
+                    System.out.println("Skipping: " + url);
+                    continue;
+                }
+                HttpResponse <String> response = downloadPage(url);
+                String html = response.body();
+
                 System.out.println("Downloaded: " + html.length() + " characters");
                 Set <String> links = extractLinks(html, url);
                 System.out.println("Links found: " + links.size());
@@ -58,11 +64,9 @@ public class Spider {
         System.out.println("URLs waiting:  " + frontier.size());
     }
 
-    private String downloadPage (String url) throws IOException, InterruptedException {
+    private HttpResponse<String> downloadPage (String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("User-Agent", "MyCrawler/1.0").GET().build();
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) throw new IOException("HTTP " + response.statusCode());
-        return response.body();
+        return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
     private Set <String> extractLinks(String html, String currentUrl) {
@@ -103,5 +107,13 @@ public class Spider {
         catch (Exception e) {
             return false;
         }
+    }
+    private boolean isHtml(String url) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("User-Agent", "MyCrawler/1.0").method("HEAD", HttpRequest.BodyPublishers.noBody()).build();
+        HttpResponse<Void> response = client.send(request,HttpResponse.BodyHandlers.discarding());
+
+        if (response.statusCode() < 200 || response.statusCode() >= 300) return false;
+        String contentType = response.headers().firstValue("Content-Type").orElse("");
+        return contentType.toLowerCase().startsWith("text/html");
     }
 }
