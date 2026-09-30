@@ -7,8 +7,10 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 
 public class Spider {
     private final Queue <String> frontier = new LinkedList<>();
@@ -69,19 +71,17 @@ public class Spider {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private Set <String> extractLinks(String html, String currentUrl) {
-        Set <String> links = new HashSet<>();
-        Pattern pattern = Pattern.compile("<a\\s+[^>]*href=[\"']([^\"']+)[\"']", Pattern.CASE_INSENSITIVE);
-        Matcher matcher = pattern.matcher(html);
+    private Set<String> extractLinks(String html, String currentUrl) {
+        Set<String> links = new HashSet<>();
+        Document document = Jsoup.parse(html, currentUrl);
+        Elements elements = document.select("a[href]");
 
-        while (matcher.find()) {
-            String link = matcher.group(1);
-            try {
-                URI base = URI.create(currentUrl);
-                URI resolved = base.resolve(link);
-                String normalized = normalizeUrl(resolved.toString());
-                if (normalized != null) links.add(normalized);
-            } catch(Exception ignored){}
+        for (Element element : elements) {
+            String link = element.absUrl("href");
+            String normalized = normalizeUrl(link);
+            if (normalized != null) {
+                links.add(normalized);
+            }
         }
         return links;
     }
