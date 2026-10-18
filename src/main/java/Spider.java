@@ -47,9 +47,28 @@ public class Spider {
                     continue;
                 }
                 HttpResponse<String> response = downloadPage(url);
+                if (response.statusCode() < 200 ||response.statusCode() >= 300) {
+                    System.out.println("Skipping HTTP status: " + response.statusCode());
+                    continue;
+                }
+
+                String contentType = response.headers()
+                        .firstValue("Content-Type")
+                        .orElse("");
+                if (!contentType.toLowerCase().startsWith("text/html")) {
+                    System.out.println("Skipping non-HTML response: "+ contentType);
+                    continue;
+                }
+
+                String finalUrl = normalizeUrl(response.uri().toString());
+                if (finalUrl == null || !isSameDomain(finalUrl)) {
+                    System.out.println("Skipping external redirect");
+                    continue;
+                }
+
                 String html = response.body();
                 System.out.println("Downloaded: " + html.length() + " characters");
-                Document document = Jsoup.parse(html, url);
+                Document document = Jsoup.parse(html, finalUrl);
                 String title = document.title();
                 document.select("script, style, noscript").remove();
                 String text = document.body().text();
