@@ -48,16 +48,20 @@ public class Spider {
                 }
                 HttpResponse<String> response = downloadPage(url);
                 String html = response.body();
+                System.out.println("Downloaded: " + html.length() + " characters");
+                Document document = Jsoup.parse(html, url);
+                String title = document.title();
+                document.select("script, style, noscript").remove();
+                String text = document.body().text();
 
-                System.out.println(
-                    "Downloaded: " + html.length() + " characters"
-                );
-                Set<String> links = extractLinks(html, url);
+                System.out.println("Title: " + title);
+                System.out.println("Text length: " + text.length());
+                System.out.println("Text preview: " + text.substring(0, Math.min(text.length(), 200)));
+                Set<String> links = extractLinks(document);
                 System.out.println("Links found: " + links.size());
+
                 for (String link : links) {
-                    if (
-                        !visited.contains(link) && isSameDomain(link)
-                    ) frontier.add(link);
+                    if (!visited.contains(link) && isSameDomain(link)) frontier.add(link);
                 }
                 pagesCrawled++;
             } catch (Exception e) {
@@ -67,9 +71,9 @@ public class Spider {
 
         System.out.println();
         System.out.println("Crawl finished");
-        System.out.println("Pages crawled: " + pagesCrawled);
-        System.out.println("URLs visited:  " + visited.size());
-        System.out.println("URLs waiting:  " + frontier.size());
+        System.out.println("Pages processed: " + pagesCrawled);
+        System.out.println("URLs attempted: " + visited.size());
+        System.out.println("URLs waiting: " + frontier.size());
     }
 
     private HttpResponse<String> downloadPage(String url)
@@ -82,17 +86,15 @@ public class Spider {
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
-    private Set<String> extractLinks(String html, String currentUrl) {
+    private Set<String> extractLinks(Document document) {
         Set<String> links = new HashSet<>();
-        Document document = Jsoup.parse(html, currentUrl);
         Elements elements = document.select("a[href]");
 
         for (Element element : elements) {
             String link = element.absUrl("href");
             String normalized = normalizeUrl(link);
-            if (normalized != null) {
-                links.add(normalized);
-            }
+
+            if (normalized != null) links.add(normalized);
         }
         return links;
     }
@@ -102,10 +104,8 @@ public class Spider {
             URI uri = URI.create(url);
             String scheme = uri.getScheme();
             if (scheme == null) return null;
-            if (
-                !scheme.equalsIgnoreCase("http") &&
-                !scheme.equalsIgnoreCase("https")
-            ) return null;
+            if (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https")) return null;
+
             return new URI(
                 scheme.toLowerCase(),
                 uri.getUserInfo(),
@@ -136,14 +136,11 @@ public class Spider {
             .header("User-Agent", "MyCrawler/1.0")
             .method("HEAD", HttpRequest.BodyPublishers.noBody())
             .build();
-        HttpResponse<Void> response = client.send(
-            request,
-            HttpResponse.BodyHandlers.discarding()
-        );
 
-        if (
-            response.statusCode() < 200 || response.statusCode() >= 300
-        ) return false;
+        HttpResponse<Void> response = client.send(request,
+            HttpResponse.BodyHandlers.discarding());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) return false;
+
         String contentType = response
             .headers()
             .firstValue("Content-Type")
