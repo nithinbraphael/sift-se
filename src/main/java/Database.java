@@ -1,10 +1,7 @@
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.nio.file.*;
+import java.sql.*;
+import java.time.Instant;
 
 public class Database implements AutoCloseable {
     private final Connection connection;
@@ -58,6 +55,30 @@ public class Database implements AutoCloseable {
         try (Statement statement = connection.createStatement()) {
             statement.execute(pagesTable);
             statement.execute(linksTable);
+        }
+    }
+
+    public void savePage(String url, String title, String content, int statusCode, String contentType) throws SQLException {
+        String sql = """
+            INSERT INTO pages
+                (url, title, content, status_code, content_type, crawled_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(url) DO UPDATE SET
+                title = excluded.title,
+                content = excluded.content,
+                status_code = excluded.status_code,
+                content_type = excluded.content_type,
+                crawled_at = excluded.crawled_at
+            """;
+
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, url);
+            statement.setString(2, title);
+            statement.setString(3, content);
+            statement.setInt(4, statusCode);
+            statement.setString(5, contentType);
+            statement.setString(6, Instant.now().toString());
+            statement.executeUpdate();
         }
     }
 

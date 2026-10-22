@@ -1,15 +1,9 @@
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.Queue;
-import java.util.Set;
+import java.net.http.*;
+import java.util.*;
 import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
+import org.jsoup.nodes.*;
 import org.jsoup.select.Elements;
 
 public class Spider {
@@ -19,15 +13,15 @@ public class Spider {
     private final HttpClient client;
     private final String domain;
     private final int maxPages;
+    private final Database database;
 
-    public Spider(String startUrl, int maxPages) {
+    public Spider(String startUrl, int maxPages, Database database) {
         frontier.add(startUrl);
         URI uri = URI.create(startUrl);
         domain = uri.getHost();
         this.maxPages = maxPages;
-        client = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+        this.database = database;
+        client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
     }
 
     public void start() {
@@ -52,9 +46,8 @@ public class Spider {
                     continue;
                 }
 
-                String contentType = response.headers()
-                        .firstValue("Content-Type")
-                        .orElse("");
+                String contentType = response.headers().firstValue("Content-Type").orElse("");
+
                 if (!contentType.toLowerCase().startsWith("text/html")) {
                     System.out.println("Skipping non-HTML response: "+ contentType);
                     continue;
@@ -72,6 +65,7 @@ public class Spider {
                 String title = document.title();
                 document.select("script, style, noscript").remove();
                 String text = document.body().text();
+                database.savePage(finalUrl, title, text, response.statusCode(), contentType);
 
                 System.out.println("Title: " + title);
                 System.out.println("Text length: " + text.length());
@@ -97,11 +91,7 @@ public class Spider {
 
     private HttpResponse<String> downloadPage(String url)
         throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("User-Agent", "MyCrawler/1.0")
-            .GET()
-            .build();
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("User-Agent", "MyCrawler/1.0").GET().build();
         return client.send(request, HttpResponse.BodyHandlers.ofString());
     }
 
@@ -112,7 +102,6 @@ public class Spider {
         for (Element element : elements) {
             String link = element.absUrl("href");
             String normalized = normalizeUrl(link);
-
             if (normalized != null) links.add(normalized);
         }
         return links;
@@ -125,15 +114,7 @@ public class Spider {
             if (scheme == null) return null;
             if (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https")) return null;
 
-            return new URI(
-                scheme.toLowerCase(),
-                uri.getUserInfo(),
-                uri.getHost(),
-                uri.getPort(),
-                uri.getPath(),
-                uri.getQuery(),
-                null
-            ).toString();
+            return new URI(scheme.toLowerCase(), uri.getUserInfo(), uri.getHost(), uri.getPort(), uri.getPath(), uri.getQuery(), null).toString();
         } catch (Exception e) {
             return null;
         }
@@ -150,20 +131,10 @@ public class Spider {
 
     private boolean isHtml(String url)
         throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("User-Agent", "MyCrawler/1.0")
-            .method("HEAD", HttpRequest.BodyPublishers.noBody())
-            .build();
-
-        HttpResponse<Void> response = client.send(request,
-            HttpResponse.BodyHandlers.discarding());
+        HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).header("User-Agent", "MyCrawler/1.0").method("HEAD", HttpRequest.BodyPublishers.noBody()).build();
+        HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
         if (response.statusCode() < 200 || response.statusCode() >= 300) return false;
-
-        String contentType = response
-            .headers()
-            .firstValue("Content-Type")
-            .orElse("");
+        String contentType = response.headers().firstValue("Content-Type").orElse("");
         return contentType.toLowerCase().startsWith("text/html");
     }
 }
